@@ -1,6 +1,7 @@
-streamlit
-pandas
-openpyxl
-beautifulsoup4
-lxml
-weasyprint
+libpango-1.0-0
+libpangoft2-1.0-0
+libharfbuzz0b
+libffi-dev
+libcairo2
+libgdk-pixbuf-2.0-0
+shared-mime-info
