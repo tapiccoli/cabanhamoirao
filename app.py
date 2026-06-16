@@ -4,7 +4,7 @@ import hashlib
 from collections import defaultdict
 
 try:
-    from weasyprint import HTML, CSS
+    from weasyprint import HTML
     WEASYPRINT_OK = True
     WEASYPRINT_ERRO = ""
 except Exception as e:
@@ -348,6 +348,12 @@ def aplicar_valores_no_html(soup, mapa, repetidos):
         soup.head.append(style_tag)
 
 
+def anexar_ao_html(soup, elemento):
+    """Anexa um elemento ao HTML mesmo quando o BeautifulSoup não encontra a tag <body>."""
+    destino = soup.body if soup.body is not None else soup
+    destino.append(elemento)
+
+
 def montar_relatorio_html(soup, repetidos, titulo="Relatório de animais repetidos no pedigree"):
     div = soup.new_tag("div")
     div["class"] = "relatorio-duplicacoes"
@@ -360,7 +366,7 @@ def montar_relatorio_html(soup, repetidos, titulo="Relatório de animais repetid
         p = soup.new_tag("p")
         p.string = "Nenhum animal repetido encontrado."
         div.append(p)
-        soup.body.append(div)
+        anexar_ao_html(soup, div)
         return
 
     tabela = soup.new_tag("table")
@@ -398,8 +404,7 @@ def montar_relatorio_html(soup, repetidos, titulo="Relatório de animais repetid
         tabela.append(tr)
 
     div.append(tabela)
-    soup.body.append(div)
-
+    anexar_ao_html(soup, div)
 
 def gerar_html_cruzamento(row1, row2, caminho_html_base):
     with open(caminho_html_base, "r", encoding="utf-8", errors="ignore") as f:
@@ -425,48 +430,82 @@ def gerar_html_individual(row1, caminho_html_base):
     return str(soup), repetidos
 
 
-def gerar_pdf(html):
+def gerar_pdf_do_html(html: str) -> bytes:
+    """Gera PDF em paisagem, com margens mínimas e tentativa de caber em uma página."""
+    if not WEASYPRINT_OK or HTML is None:
+        raise RuntimeError(
+            "WeasyPrint não está instalado ou não carregou corretamente. "
+            f"Detalhe: {WEASYPRINT_ERRO}"
+        )
+
+    from weasyprint import CSS
+
     css_pdf = CSS(string="""
         @page {
             size: A4 landscape;
             margin: 0mm;
         }
 
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
         body {
-            zoom: 0.48;
+            zoom: 0.45;
         }
 
         table {
             width: 100% !important;
             table-layout: fixed !important;
-            page-break-inside: avoid;
+            page-break-inside: avoid !important;
+        }
+
+        tr, td {
+            page-break-inside: avoid !important;
         }
 
         td {
             font-size: 6px !important;
-            line-height: 1.05em !important;
-            padding: 1px !important;
+            line-height: 1.02em !important;
+            padding: 0px !important;
             overflow-wrap: anywhere !important;
             word-break: break-word !important;
             white-space: normal !important;
         }
 
+        span, strong {
+            font-size: 6px !important;
+            line-height: 1.02em !important;
+        }
+
         .relatorio-duplicacoes {
-            page-break-before: always;
-            zoom: 1.2;
+            margin-top: 4px !important;
+            page-break-before: avoid !important;
+            zoom: 0.95;
+        }
+
+        .relatorio-duplicacoes table,
+        .relatorio-duplicacoes th,
+        .relatorio-duplicacoes td {
+            font-size: 7px !important;
+            padding: 1px !important;
         }
     """)
 
-    return HTML(string=html).write_pdf(stylesheets=[css_pdf])
+    return HTML(
+        string=html,
+        base_url=os.getcwd()
+    ).write_pdf(stylesheets=[css_pdf])
 
 # ==============================
 # INTERFACE
 # ==============================
 
-st.markdown("Carregue a planilha e o modelo HTML, ou deixe os arquivos na mesma pasta do app.")
+st.markdown("Carregue somente a planilha. O modelo HTML é fixo do sistema.")
 
 arquivo_planilha = st.file_uploader("Planilha padrão (.xlsx)", type=["xlsx"])
-arquivo_html = st.file_uploader("Modelo HTML", type=["html", "htm"])
 
 if arquivo_planilha is not None:
     excel = pd.ExcelFile(arquivo_planilha)
@@ -486,16 +525,11 @@ animal2_df = None
 if "animal2" in excel.sheet_names:
     animal2_df = pd.read_excel(excel, sheet_name="animal2", dtype=str)
 
-if arquivo_html is not None:
-    caminho_html_temp = "_modelo_upload_temp.html"
-    with open(caminho_html_temp, "wb") as f:
-        f.write(arquivo_html.getbuffer())
-    caminho_html_base = caminho_html_temp
-else:
-    if not os.path.exists(ARQUIVO_HTML_BASE):
-        st.warning(f"Carregue o HTML ou coloque '{ARQUIVO_HTML_BASE}' na pasta do app.")
-        st.stop()
-    caminho_html_base = ARQUIVO_HTML_BASE
+if not os.path.exists(ARQUIVO_HTML_BASE):
+    st.error(f"Arquivo {ARQUIVO_HTML_BASE} não encontrado na pasta do app.")
+    st.stop()
+
+caminho_html_base = ARQUIVO_HTML_BASE
 
 modo = st.sidebar.radio(
     "Tipo de relatório",
@@ -528,7 +562,7 @@ if modo == "Relatório individual":
         )
 
         try:
-            pdf = gerar_pdf(html)
+            pdf = gerar_pdf_do_html(html)
             st.download_button(
                 "Baixar PDF do relatório individual",
                 data=pdf,
@@ -576,7 +610,7 @@ else:
         )
 
         try:
-            pdf = gerar_pdf(html)
+            pdf = gerar_pdf_do_html(html)
             st.download_button(
                 "Baixar PDF do cruzamento",
                 data=pdf,
