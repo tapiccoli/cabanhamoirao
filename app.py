@@ -360,7 +360,10 @@ def montar_relatorio_html(soup, repetidos, titulo="Relatório de animais repetid
         p = soup.new_tag("p")
         p.string = "Nenhum animal repetido encontrado."
         div.append(p)
+    if soup.body:
         soup.body.append(div)
+    else:
+        soup.append(div)
         return
 
     tabela = soup.new_tag("table")
@@ -398,8 +401,11 @@ def montar_relatorio_html(soup, repetidos, titulo="Relatório de animais repetid
         tabela.append(tr)
 
     div.append(tabela)
-    soup.body.append(div)
 
+    if soup.body:
+        soup.body.append(div)
+    else:
+        soup.append(div)
 
 def gerar_html_cruzamento(row1, row2, caminho_html_base):
     with open(caminho_html_base, "r", encoding="utf-8", errors="ignore") as f:
