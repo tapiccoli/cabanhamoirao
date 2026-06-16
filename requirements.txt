@@ -2,5 +2,4 @@ streamlit
 pandas
 openpyxl
 beautifulsoup4
-lxml
 weasyprint
